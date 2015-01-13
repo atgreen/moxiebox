@@ -180,84 +180,25 @@ sim_resume (machine& mach, unsigned long long cpu_budget)
 	    {
 	      /* This is a Form 3 instruction.  */
 	      int opcode = (inst >> 10 & 0xf);
-
-	      switch (opcode)
+	      word flags[10] = { CC_EQ, ~CC_EQ, CC_LT, CC_GT, CC_LTU, CC_GTU, 
+				 CC_GT | CC_EQ, CC_LT | CC_EQ, CC_GTU | CC_EQ, 
+				 CC_LTU | CC_EQ };
+	      if (opcode < 10)
 		{
-		case 0x00: /* beq */
-		  {
-		    TRACE("beq");
-		    if (cpu.asregs.cc & CC_EQ)
+		  if (cpu.asregs.cc & flags[opcode])
+		    {
+		      TRACE("BRANCH");
 		      pc += INST2OFFSET(inst);
-		  }
+		      /* Increment basic block count */
+		      if (mach.profiling)
+			mach.gprof_bb_data[pc+2]++;
+		    }
+		}
+	      else
+		{
+		  TRACE("SIGILL3");
+		  cpu.asregs.exception = SIGILL;
 		  break;
-		case 0x01: /* bne */
-		  {
-		    TRACE("bne");
-		    if (! (cpu.asregs.cc & CC_EQ))
-		      pc += INST2OFFSET(inst);
-		  }
-		  break;
-		case 0x02: /* blt */
-		  {
-		    TRACE("blt");
-		    if (cpu.asregs.cc & CC_LT)
-		      pc += INST2OFFSET(inst);
-		  }		  break;
-		case 0x03: /* bgt */
-		  {
-		    TRACE("bgt");
-		    if (cpu.asregs.cc & CC_GT)
-		      pc += INST2OFFSET(inst);
-		  }
-		  break;
-		case 0x04: /* bltu */
-		  {
-		    TRACE("bltu");
-		    if (cpu.asregs.cc & CC_LTU)
-		      pc += INST2OFFSET(inst);
-		  }
-		  break;
-		case 0x05: /* bgtu */
-		  {
-		    TRACE("bgtu");
-		    if (cpu.asregs.cc & CC_GTU)
-		      pc += INST2OFFSET(inst);
-		  }
-		  break;
-		case 0x06: /* bge */
-		  {
-		    TRACE("bge");
-		    if (cpu.asregs.cc & (CC_GT | CC_EQ))
-		      pc += INST2OFFSET(inst);
-		  }
-		  break;
-		case 0x07: /* ble */
-		  {
-		    TRACE("ble");
-		    if (cpu.asregs.cc & (CC_LT | CC_EQ))
-		      pc += INST2OFFSET(inst);
-		  }
-		  break;
-		case 0x08: /* bgeu */
-		  {
-		    TRACE("bgeu");
-		    if (cpu.asregs.cc & (CC_GTU | CC_EQ))
-		      pc += INST2OFFSET(inst);
-		  }
-		  break;
-		case 0x09: /* bleu */
-		  {
-		    TRACE("bleu");
-		    if (cpu.asregs.cc & (CC_LTU | CC_EQ))
-		      pc += INST2OFFSET(inst);
-		  }
-		  break;
-		default:
-		  {
-		    TRACE("SIGILL3");
-		    cpu.asregs.exception = SIGILL;
-		    break;
-		  }
 		}
 	    }
 	  else
@@ -377,10 +318,18 @@ sim_resume (machine& mach, unsigned long long cpu_budget)
  		sp -= 4;
  		wlat (mach, sp, cpu.asregs.regs[0]);
 
+		/* Increment call arc count */
+		if (mach.profiling)
+		  mach.gprof_cg_data[(uint64_t) fn << 32 | pc]++;
+
  		/* Uncache the stack pointer and set the pc and $fp.  */
 		cpu.asregs.regs[1] = sp;
 		cpu.asregs.regs[0] = sp;
  		pc = fn - 2;
+
+		/* Increment basic block count */
+		if (mach.profiling)
+		  mach.gprof_bb_data[fn]++;
  	      }
  	      break;
  	    case 0x04: /* ret */
@@ -402,6 +351,10 @@ sim_resume (machine& mach, unsigned long long cpu_budget)
 
  		/* Uncache the stack pointer.  */
  		cpu.asregs.regs[1] = sp;
+
+		/* Increment basic block count */
+		if (mach.profiling)
+		  mach.gprof_bb_data[pc + 2]++;
   	      }
   	      break;
 	    case 0x05: /* add */
@@ -620,10 +573,18 @@ sim_resume (machine& mach, unsigned long long cpu_budget)
 		sp -= 4;
 		wlat (mach, sp, cpu.asregs.regs[0]);
 
+		/* Increment call arc count */
+		if (mach.profiling)
+		  mach.gprof_cg_data[(uint64_t) fn << 32 | pc]++;
+
 		/* Uncache the stack pointer and set the fp & pc.  */
 		cpu.asregs.regs[1] = sp;
 		cpu.asregs.regs[0] = sp;
 		pc = fn - 2;
+
+		/* Increment basic block count */
+		if (mach.profiling)
+		  mach.gprof_bb_data[fn]++;
 	      }
 	      break;
 	    case 0x1a: /* jmpa */
@@ -632,6 +593,10 @@ sim_resume (machine& mach, unsigned long long cpu_budget)
 
 		TRACE("jmpa");
 		pc = tgt - 2;
+
+		/* Increment basic block count */
+		if (mach.profiling)
+		  mach.gprof_bb_data[tgt]++;
 	      }
 	      break;
 	    case 0x1b: /* ldi.b (immediate) */
